@@ -195,10 +195,10 @@ func (s *Server) Update(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("get %q: %w", name, err)
 		}
-		s.logPrintf("Fetched %q version %d", name, sec.Version)
+		s.logPrintf("[update] fetched %q version %d", name, sec.Version)
 		key, err := parseStoredKey(name, sec.Version, sec.Value)
 		if err != nil {
-			s.logPrintf("WARNING: Skipped invalid key %q (%v)", name, err)
+			s.logPrintf("[update] WARNING: skipped invalid key %q (%v)", name, err)
 			continue
 		}
 		have[key.mapID()] = key
@@ -221,6 +221,7 @@ func (s *Server) fillKnown(found map[string]api.SecretVersion) map[string]*sshKe
 		if v, ok := found[key.Name]; ok && v == key.Version {
 			out[id] = key
 			delete(found, key.Name)
+			s.logPrintf("[update] keep %q version %d", key.Name, key.Version)
 		}
 	}
 	return out

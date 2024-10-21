@@ -3,6 +3,9 @@ module github.com/tailscale/tskagent
 go 1.23.2
 
 require (
+	github.com/creachadair/command v0.1.15
+	github.com/creachadair/flax v0.0.0-20240212192608-428acafa3bbe
+	github.com/creachadair/taskgroup v0.12.0
 	github.com/tailscale/setec v0.0.0-20240930150730-e6eb93658ed3
 	golang.org/x/crypto v0.28.0
 )
