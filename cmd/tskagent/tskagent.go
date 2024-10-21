@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/creachadair/command"
 	"github.com/creachadair/flax"
@@ -24,9 +25,10 @@ import (
 )
 
 var flags struct {
-	Server string `flag:"server,Secret server address (required)"`
-	Socket string `flag:"socket,Agent socket path (required)"`
-	Prefix string `flag:"prefix,Secret name prefix (required)"`
+	Server string        `flag:"server,Secret server address (required)"`
+	Socket string        `flag:"socket,Agent socket path (required)"`
+	Prefix string        `flag:"prefix,Secret name prefix (required)"`
+	Update time.Duration `flag:"update,Automatic update interval (0 means no updates)"`
 }
 
 func main() {
@@ -68,6 +70,16 @@ func run(env *command.Env) error {
 	})
 	if err := srv.Update(env.Context()); err != nil {
 		return fmt.Errorf("initialize agent: %w", err)
+	}
+	if flags.Update > 0 {
+		go func() {
+			for range time.NewTicker(flags.Update).C {
+				if err := srv.Update(env.Context()); err != nil {
+					log.Printf("WARNING: Update failed: %v", err)
+				}
+			}
+		}()
+		log.Printf("Enabled periodic updates (%v)", flags.Update)
 	}
 
 	var g taskgroup.Group
