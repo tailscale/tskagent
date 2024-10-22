@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -18,10 +17,8 @@ import (
 
 	"github.com/creachadair/command"
 	"github.com/creachadair/flax"
-	"github.com/creachadair/taskgroup"
 	"github.com/tailscale/setec/client/setec"
 	"github.com/tailscale/tskagent"
-	"golang.org/x/crypto/ssh/agent"
 )
 
 var flags struct {
@@ -81,25 +78,6 @@ func run(env *command.Env) error {
 		}()
 		log.Printf("Enabled periodic updates (%v)", flags.Update)
 	}
-
-	var g taskgroup.Group
-	g.Run(func() {
-		<-env.Context().Done()
-		log.Printf("Signal received; closing listener")
-		lst.Close()
-	})
-	for {
-		conn, err := lst.Accept()
-		if err != nil {
-			if !errors.Is(err, net.ErrClosed) {
-				log.Printf("Listener stopped: %v", err)
-			}
-			break
-		}
-		g.Go(func() error {
-			return agent.ServeAgent(srv, conn)
-		})
-	}
-	g.Wait()
+	srv.Serve(env.Context(), lst)
 	return nil
 }

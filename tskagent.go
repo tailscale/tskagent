@@ -21,9 +21,13 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"net"
 	"strings"
 	"sync"
 
+	"github.com/creachadair/taskgroup"
 	"github.com/tailscale/setec/client/setec"
 	"github.com/tailscale/setec/types/api"
 	"golang.org/x/crypto/ssh"
@@ -71,6 +75,35 @@ type Server struct {
 	locked     bool
 	passphrase string
 	keys       map[string]*sshKey
+}
+
+// Serve accepts connections from lst and serve the agent to each in its own
+// goroutine. It runs until lst closes or ctx ends.
+func (s *Server) Serve(ctx context.Context, lst net.Listener) {
+	var g taskgroup.Group
+	g.Run(func() {
+		<-ctx.Done()
+		log.Printf("Signal received; closing listener")
+		lst.Close()
+	})
+	for {
+		conn, err := lst.Accept()
+		if err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				log.Printf("Listener stopped: %v", err)
+			}
+			break
+		}
+		g.Go(func() error { return s.ServeOne(conn) })
+	}
+	g.Wait()
+}
+
+// ServeOne serves the agent to the specified connection.  It is safe to call
+// ServeOne concurrently from multiple goroutines with separate connections,
+// including while Serve is running.
+func (s *Server) ServeOne(conn io.ReadWriter) error {
+	return agent.ServeAgent(s, conn)
 }
 
 // List implements part of the [agent.Agent] interface.
