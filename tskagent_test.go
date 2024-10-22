@@ -57,19 +57,25 @@ func TestAgent(t *testing.T) {
 
 	// Run the agent over a pipe and make sure client calls do what they should.
 	cconn, sconn := net.Pipe()
-	cli := taskgroup.Run(func() { agent.ServeAgent(ts, sconn) })
+	cli := taskgroup.Run(func() { ts.ServeOne(sconn) })
 	defer func() { cconn.Close(); cli.Wait() }()
+	mustUpdate := func(t *testing.T) {
+		t.Helper()
+		if err := ts.Update(context.Background()); err != nil {
+			t.Fatalf("Update failed: %v", err)
+		}
+	}
 
 	ac := agent.NewClient(cconn)
+	altKey := ed25519.NewKeyFromSeed([]byte("00000000000000000000000000000000")) // throwaway
 
 	t.Run("AddDoesNotWork", func(t *testing.T) {
-		pk := ed25519.NewKeyFromSeed([]byte("00000000000000000000000000000000")) // throwaway
 		err := ac.Add(agent.AddedKey{
-			PrivateKey: pk,
+			PrivateKey: altKey,
 			Comment:    "Nothing to see here",
 		})
 		if err == nil {
-			t.Errorf("Add key %v: did not get expected error", pk)
+			t.Errorf("Add key %v: did not get expected error", altKey)
 		}
 	})
 
@@ -119,5 +125,50 @@ func TestAgent(t *testing.T) {
 		}
 	})
 
-	// TODO: Test Sign, Remove, RemoveAll.
+	t.Run("Sign", func(t *testing.T) {
+		const testInput = "boo likes forests"
+		sig, err := ac.Sign(pubKey, []byte(testInput))
+		if err != nil {
+			t.Fatalf("Sign: unexpected error: %v", err)
+		}
+		if got, want := sig.Format, "ssh-ed25519"; got != want {
+			t.Errorf("Sign format: got %q, want %q", got, want)
+		}
+		if len(sig.Rest) != 0 {
+			t.Errorf("Sign: extra data after signature: %q", sig.Rest)
+		}
+	})
+
+	t.Run("RemoveAll", func(t *testing.T) {
+		if err := ac.RemoveAll(); err != nil {
+			t.Errorf("RemoveAll: unexpected error: %v", err)
+		}
+		lst, err := ac.List()
+		if err != nil {
+			t.Errorf("List: unexpected error: %v", err)
+		} else if len(lst) != 0 {
+			t.Errorf("List: got %+v, want empty", lst)
+		}
+		mustUpdate(t)
+	})
+
+	t.Run("RemoveMissing", func(t *testing.T) {
+		key, err := ssh.NewSignerFromKey(altKey)
+		if err != nil {
+			t.Fatalf("Convert key: %v", err)
+		}
+		if err := ac.Remove(key.PublicKey()); err == nil {
+			t.Error("Remove missing unexpectedly succeeded")
+		}
+	})
+
+	t.Run("RemovePresent", func(t *testing.T) {
+		if err := ac.Remove(pubKey); err != nil {
+			t.Errorf("Remove: unexpected error: %v", err)
+		}
+		if err := ac.Remove(pubKey); err == nil {
+			t.Error("Remove again: unexpectedly succeeded")
+		}
+		mustUpdate(t)
+	})
 }
