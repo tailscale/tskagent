@@ -140,6 +140,7 @@ func TestAgent(t *testing.T) {
 	})
 
 	t.Run("RemoveAll", func(t *testing.T) {
+		defer mustUpdate(t)
 		if err := ac.RemoveAll(); err != nil {
 			t.Errorf("RemoveAll: unexpected error: %v", err)
 		}
@@ -149,7 +150,6 @@ func TestAgent(t *testing.T) {
 		} else if len(lst) != 0 {
 			t.Errorf("List: got %+v, want empty", lst)
 		}
-		mustUpdate(t)
 	})
 
 	t.Run("RemoveMissing", func(t *testing.T) {
@@ -163,6 +163,7 @@ func TestAgent(t *testing.T) {
 	})
 
 	t.Run("RemovePresent", func(t *testing.T) {
+		defer mustUpdate(t)
 		if err := ac.Remove(pubKey); err != nil {
 			t.Errorf("Remove: unexpected error: %v", err)
 		}
