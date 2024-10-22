@@ -153,7 +153,7 @@ func (s *Server) Unlock(passphrase []byte) error {
 	defer s.μ.Unlock()
 	if !s.locked {
 		return errors.New("agent: not locked")
-	} else if subtle.ConstantTimeCompare(passphrase, []byte(s.passphrase)) != 0 {
+	} else if subtle.ConstantTimeCompare(passphrase, []byte(s.passphrase)) == 0 {
 		return errors.New("agent: incorrect passphrase")
 	}
 	s.locked = false
