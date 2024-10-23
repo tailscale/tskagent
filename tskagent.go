@@ -39,16 +39,15 @@ type Config struct {
 	// Client is the client for the secrets service. It must be set.
 	Client setec.Client
 
-	// Prefix is the non-empty secret name prefix to be served.
-	// It must be non-empty.
+	// Prefix is the secret name prefix to be served.  It must be non-empty.
 	Prefix string
 
 	// Logf, if set, is used to write logs. If nil, logs are discarded.
 	Logf func(string, ...any)
 }
 
-// NewServer constructs a new [Server] that fetches SSH keys from the specified
-// prefix of the given [setec.Client]. The prefix must be non-empty.
+// NewServer constructs a new [Server] that fetches SSH keys matching the
+// specified configuration in [setec].
 //
 // The caller must call [Server.Update] at least once to initialize the list of
 // keys available to the agent.  Thereafter, the caller may call Update again
