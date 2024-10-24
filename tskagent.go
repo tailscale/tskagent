@@ -82,14 +82,14 @@ func (s *Server) Serve(ctx context.Context, lst net.Listener) {
 	var g taskgroup.Group
 	g.Run(func() {
 		<-ctx.Done()
-		log.Printf("Signal received; closing listener")
+		s.logPrintf("Signal received; closing listener")
 		lst.Close()
 	})
 	for {
 		conn, err := lst.Accept()
 		if err != nil {
 			if !errors.Is(err, net.ErrClosed) {
-				log.Printf("Listener stopped: %v", err)
+				s.logPrintf("Listener stopped: %v", err)
 			}
 			break
 		}
