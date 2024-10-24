@@ -1,6 +1,6 @@
 module github.com/tailscale/tskagent
 
-go 1.23.2
+go 1.23
 
 require (
 	github.com/creachadair/command v0.1.15
