@@ -3,7 +3,7 @@ module github.com/tailscale/tskagent
 go 1.24.0
 
 require (
-	github.com/creachadair/command v0.1.23
+	github.com/creachadair/command v0.1.24
 	github.com/creachadair/flax v0.0.5
 	github.com/creachadair/taskgroup v0.13.2
 	github.com/google/go-cmp v0.7.0
