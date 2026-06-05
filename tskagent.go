@@ -303,43 +303,121 @@ func parseStoredKey(name string, version api.SecretVersion, data []byte) (*sshKe
 func parseComment(key []byte) string {
 	blk, _ := pem.Decode(key)
 
-	// The OpenSSH key format begins with a header followed by a public and a
-	// private key.  Cut off the headers and skip the public key to find the
-	// private key, where the comment resides.  The header is separated from the
-	// keys by a hard-coded uint32 key count of 1 (big-endian).
-	_, keys, ok := bytes.Cut(blk.Bytes, []byte("\x00\x00\x00\x01"))
-	if !ok {
+	// See: https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.key
+	s := newScanner(blk.Bytes)
+
+	// Check magic format header.
+	if err := s.scanLiteral("openssh-key-v1\x00"); err != nil {
+		return "" // not a key file, or some antique version
+	}
+	cipher, err := s.scanString()
+	if err != nil || string(cipher) != "none" {
+		return "" // encrypted contents, we can't read them
+	}
+	// Skip kdfname, kdfoptions, which we don't care about.
+	if err := s.skipStrings(2); err != nil {
+		return ""
+	}
+	// The next field is the number of keys. This could in theory be any value,
+	// but OpenSSH hardcodes it to 1.
+	if nk, err := s.scanUint32(); err != nil || nk != 1 {
+		return ""
+	}
+	// Skip the public keys, as the comment (if any) is with the private key.
+	if err := s.skipStrings(1); err != nil {
 		return ""
 	}
 
-	// Skip the public key...
-	pubLen := int(binary.BigEndian.Uint32(keys))
-	if 4+pubLen > len(keys) {
-		return ""
-	}
-	keys = keys[4+pubLen:]
-
-	// Extract the private key...
-	privLen := int(binary.BigEndian.Uint32(keys))
-	if 4+privLen > len(keys) {
+	// The rest of the packet should be a bundle of private keys.
+	// Because we know cipher is "none", it is plaintext, but there may
+	// be some padding at the end.
+	pkeys, err := s.scanString()
+	if err != nil {
 		return ""
 	}
 
-	// Remove padding at end (pad bytes are 0x01-0x07)
-	for n := len(keys) - 1; keys[n] < 0x08; n-- {
-		keys = keys[:n]
+	pk := newScanner(pkeys)
+	// Skip the two 32-bit validity nonces.
+	if err := pk.skipBytes(8); err != nil {
+		return ""
 	}
-	keys = keys[4:] // remove length prefix (checked above)
-	keys = keys[8:] // remove checksum (not used)
-
-	// The comment is the last length-prefixed field of the private key.
-	// Skip past all the others.
-	for len(keys) >= 4 {
-		n := int(binary.BigEndian.Uint32(keys))
-		if 4+n == len(keys) {
-			return string(keys[4:])
+	// The rest of the bundle depends on what type of key this is, but
+	// the last string field will be the comment (if any).
+	var last string
+	for !pk.atEOF() {
+		s, err := pk.scanString()
+		if err != nil {
+			break
 		}
-		keys = keys[4+n:]
+		last = string(s)
 	}
-	return ""
+	return last
+}
+
+// A scanner is a minimal scanner for a slice of bytes representing an OpenSSH
+// key file. The methods of this type alias (but do not modify) the input.
+type scanner struct {
+	buf []byte
+}
+
+func newScanner(data []byte) *scanner {
+	return &scanner{buf: data}
+}
+
+// atEOF reports whether s has any further contents.
+func (s *scanner) atEOF() bool { return len(s.buf) == 0 }
+
+// skipBytes advances past the first n bytes of the input.
+func (s *scanner) skipBytes(n int) error {
+	if len(s.buf) < n {
+		return fmt.Errorf("got %d bytes, want %d", len(s.buf), n)
+	}
+	s.buf = s.buf[n:]
+	return nil
+}
+
+// skipStrings advances past the next n length-prefixed strings.
+func (s *scanner) skipStrings(n int) error {
+	for n > 0 {
+		if _, err := s.scanString(); err != nil {
+			return err
+		}
+		n--
+	}
+	return nil
+}
+
+// scanLiteral advances past the specified prefix of the input.
+func (s *scanner) scanLiteral(want string) error {
+	rest, ok := bytes.CutPrefix(s.buf, []byte(want))
+	if !ok {
+		return fmt.Errorf("missing %q", want)
+	}
+	s.buf = rest
+	return nil
+}
+
+// scanString consumes and returns a length-prefixed string.
+func (s *scanner) scanString() ([]byte, error) {
+	n32, err := s.scanUint32()
+	if err != nil {
+		return nil, err
+	}
+	n := int(n32)
+	if n > len(s.buf) {
+		return nil, fmt.Errorf("got %d bytes, want %d", len(s.buf), n)
+	}
+	out := s.buf[:n]
+	s.buf = s.buf[n:]
+	return out, nil
+}
+
+// scanUint32 consumes and returns a big-endian 32-bit integer.
+func (s *scanner) scanUint32() (uint32, error) {
+	if len(s.buf) < 4 {
+		return 0, fmt.Errorf("got %d bytes, want 4", len(s.buf))
+	}
+	out := binary.BigEndian.Uint32(s.buf)
+	s.buf = s.buf[4:]
+	return out, nil
 }
