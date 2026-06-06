@@ -39,6 +39,13 @@ The agent loads all the secrets matching the specified name prefix once at
 startup.  The value of each secret must be a PEM-formatted private key. The
 agent logs and ignores any secrets that do not have this format.
 
+> [!NOTE]
+> Because `tskagent` gets its keys from setec, and does not have any way to
+> prompt a user for a passphrase, the keys stored in setec must not have a
+> passphrase set.  If you are generating a key with `ssh-keygen`, for example,
+> use `-N ''` to specify that no passphrase should be required, or enter an
+> empty line when prompted.
+
 By default, keys are loaded from setec only once when the agent starts up.
 Use `--update` to make it poll at the specified interval for new secret
 versions.
@@ -48,3 +55,15 @@ but note that this only affects the agent's copy, it does not remove the key
 from setec.
 
 [setec]: https://github.com/tailscale/setec
+
+### Example: Generate and Install a Key
+
+Here is an example of how to generate and upload a private key using
+`ssh-keygen` and the `setec` command-line tool:
+
+```shell
+# Note: Use -N '' to specify an empty passphrase.
+% ssh-keygen -N '' -C 'Deploy production services' -t ed25519 -f deploy-access.key
+
+% setec put prod/example/ssh-keys/deploy-access --from-file deploy-access.key --verbatim
+```
